@@ -1,0 +1,25 @@
+# Python virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment secrets
+.env
+
+# Pytest cache
+.pytest_cache/
+
+# Runtime logs
+logs/*.log
+
+# Generated / downloaded datasets
+data/raw/
+data/processed/
+data/external/
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/

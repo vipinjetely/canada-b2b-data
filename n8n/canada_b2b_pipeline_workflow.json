@@ -1,0 +1,272 @@
+{
+  "name": "Canada B2B Data Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:8000/pipeline/status",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        800,
+        16
+      ],
+      "id": "f9daaf09-3dc0-455c-8362-3ef02811c52e",
+      "name": "Check Pipeline Status"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/pipeline/run",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        384,
+        16
+      ],
+      "id": "5a9ecfbb-0562-44fc-8c77-7b0b79ee3c65",
+      "name": "Run Canada B2B Pipeline"
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:8000/health",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        176,
+        16
+      ],
+      "id": "588f17d6-358f-4688-b0ea-3f38656b3345",
+      "name": "Health Check"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        608,
+        48
+      ],
+      "id": "8fa7c130-22b1-4bdd-97cf-9b36172bd65e",
+      "name": "Wait 30 Seconds",
+      "webhookId": "e011f9c5-beb9-48f6-9c3b-b9d4e479de37"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        16
+      ],
+      "id": "f112e493-c1f8-4f84-8081-ecb6cf0ffbc2",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0aeaddf4-4803-4489-b798-08bb48bc6ce9",
+              "leftValue": "={{$json.state}}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1024,
+        16
+      ],
+      "id": "39d434c9-57cb-462d-aa86-a3cd8f7f78ee",
+      "name": "Pipeline Completed?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "828e721f-7c8e-4599-9461-040ef6514875",
+              "leftValue": "={{$json.state}}",
+              "rightValue": "failed",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1264,
+        144
+      ],
+      "id": "44e23552-a32c-43ea-9b28-15efac7c34b6",
+      "name": "Pipeline Failed?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1264,
+        -96
+      ],
+      "id": "c019d9a5-eb6e-46bb-acde-8057976873e1",
+      "name": "Pipeline Completed Successfully"
+    },
+    {
+      "parameters": {
+        "errorMessage": "Canada B2B pipeline failed. Check pipeline status and logs/pipeline.log for details."
+      },
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1504,
+        32
+      ],
+      "id": "c4b121ba-0ecf-4d88-b799-3275b7dedb5b",
+      "name": "Pipeline Execution Failed"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Run Canada B2B Pipeline": {
+      "main": [
+        [
+          {
+            "node": "Wait 30 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Check": {
+      "main": [
+        [
+          {
+            "node": "Run Canada B2B Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30 Seconds": {
+      "main": [
+        [
+          {
+            "node": "Check Pipeline Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Health Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Pipeline Status": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Completed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pipeline Completed?": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Completed Successfully",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pipeline Failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pipeline Failed?": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Execution Failed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 30 Seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a02c849e-56db-459f-bda7-41551bd9bdd0",
+  "meta": {
+    "instanceId": "62a00e791ae92bc3f70098afe7f657549607668023f4dc241e831a5363f6c5b6"
+  },
+  "nodeGroups": [],
+  "id": "zpI5KSmOvK85ZO4z",
+  "tags": []
+}
