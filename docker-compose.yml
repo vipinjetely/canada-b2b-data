@@ -25,28 +25,5 @@ services:
       timeout: 5s
       retries: 5
 
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: canada_b2b_n8n
-    restart: unless-stopped
-
-    ports:
-      - "5678:5678"
-
-    environment:
-      - N8N_HOST=localhost
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=http
-      - GENERIC_TIMEZONE=America/Toronto
-      - TZ=America/Toronto
-
-    volumes:
-      - n8n_data:/home/node/.n8n
-
-    depends_on:
-      postgres:
-        condition: service_healthy
-
 volumes:
   postgres_data:
-  n8n_data:

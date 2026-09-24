@@ -266,6 +266,7 @@ POST /pipeline/run
 The API is intended for local development/orchestration in the current implementation. Authentication should be added before exposing it to an untrusted network.
 
 ## n8n Orchestration
+n8n is used as an external orchestration layer and is not started by Docker Compose. The exported workflow is included at `n8n/canada_b2b_pipeline_workflow.json` and can be imported into an existing n8n instance.
 
 n8n is used as the orchestration layer.
 
