@@ -1,77 +1,90 @@
 # Canada B2B Business Data Automation System
 
-A production-oriented data pipeline for collecting, normalizing, resolving, enriching, storing, searching, and reviewing Canadian B2B business data from legitimate public and government sources.
+A production-oriented data pipeline for discovering, classifying, resolving, enriching, validating, storing, monitoring, and reviewing Canadian business/location data from legitimate public and open-data sources.
 
-V2 focuses on three principles:
+The project is designed around four principles:
 
-- current source data,
-- conservative entity resolution,
-- traceable source provenance.
+- broad Canada-wide discovery,
+- conservative identity resolution,
+- evidence-based enrichment,
+- transparent data quality and limitations.
 
-The system does not manufacture missing business information or inflate coverage by treating duplicate licence/category rows as separate businesses.
+Missing information is not fabricated. Aggregate statistics are not assigned to individual businesses, ambiguous identity matches are not automatically merged, and raw place/source counts are not presented as legal-business counts.
 
 ---
 
-## V2 Current Status
+## V3 Current Status
 
-The V2 database currently contains:
+The V3 operating-location layer currently contains:
 
-- **849,849 canonical business entities**
-- **948,765 source provenance records**
-- **6 active source jurisdictions**
-- **0 orphan provenance records**
-- **0 duplicate Federal Corporation IDs**
-- **0 duplicate Provincial Registry IDs**
-- **0 failed records across the six recorded source loads**
+| Metric | Current Result |
+|---|---:|
+| Business/location candidates | **1,183,392** |
+| With phone | **1,110,274** |
+| With email | **600,645** |
+| With website | **992,647** |
+| Sales-ready by V3 completeness rule | **724,614** |
+| Verified location-level employee evidence | **3,653** |
+| High source-confidence records | **461,884** |
+| Automated V3 transformation stages | **11** |
+| Current automated tests | **29 passed** |
 
-The current source collection cycle was completed on **25 September 2026**.
+These records represent classified business/location candidates, not a claim of 1,183,392 nationally unique legal companies.
 
-For detailed coverage and freshness information, see:
-
-`V2_COVERAGE_FRESHNESS_REPORT.md`
+The V2 government/registry layer remains preserved separately and contains **849,849 canonical entities** with **948,765 provenance records** across six source jurisdictions.
 
 ---
 
 ## Architecture
 
 ```text
-Public / Government Data Sources
+Open / Government Data Sources
             |
             v
-       Collectors
+     Canada-wide Discovery
             |
             v
-       Raw Source Data
+       Classification
+   Business / Non-business
+        / Review
             |
             v
-       Normalizers
+   Operating-Location Layer
             |
             v
-  Source-Specific Records
+ Normalization / Identity Keys
             |
             v
- Entity Resolution / Deduplication
+ Conservative Entity Resolution
             |
        +----+----+
        |         |
        v         v
- Existing      New Local
- Canonical     Canonical
- Entity        Entity
+ Government   Contact /
+ Validation   Attribute Data
        |         |
        +----+----+
             |
             v
-       PostgreSQL
+ Evidence-based Enrichment
+            |
+            v
+ Quality / Readiness Scoring
+            |
+            v
+ Daily Change Detection
+            |
+            v
+        PostgreSQL
             |
        +----+----+
        |         |
        v         v
-   Provenance   Streamlit
-   / History    Dashboard
+ Change History  Streamlit
+ / Evidence      Dashboard
 ```
 
-The database separates canonical business entities from source records so that multiple licences or public-source records can resolve to one business without losing their original provenance.
+The V3 design deliberately separates operating locations, identity-resolution keys, employee evidence, contact evidence, change history, and the current database snapshot.
 
 ---
 
@@ -80,224 +93,438 @@ The database separates canonical business entities from source records so that m
 - Python 3
 - PostgreSQL
 - Docker / Docker Compose
+- DuckDB
 - pandas
 - psycopg
 - Streamlit
-- FastAPI
-- Uvicorn
-- n8n
+- FastAPI / Uvicorn foundation
+- n8n orchestration foundation
+- Windows Task Scheduler for the V3 daily runner
 - pytest
 
 ---
 
-## Project Structure
+## V3 Pipeline
+
+The production V3 transformation pipeline is defined in:
 
 ```text
-collectors/        Public/government source collectors
-normalizers/       Source-specific normalization
-deduplication/     Conservative entity resolution
-enrichment/        Supplemental enrichment logic
-database/          PostgreSQL schemas and loaders
-dashboard/         Streamlit dashboard
-tests/             Data-quality/database tests
-logs/              Runtime logs
-data/              Local raw/processed datasets (Git ignored)
-
-run_pipeline.py
-pipeline_api.py
-docker-compose.yml
-requirements.txt
-.env.example
-V2_COVERAGE_FRESHNESS_REPORT.md
+run_v3_pipeline.py
 ```
 
----
+It currently contains **11 ordered stages**:
 
-## V2 Data Sources
+1. Classify Canadian Overture places
+2. Build strict business candidates
+3. Prepare employee-enrichment fields
+4. Build operating-location layer
+5. Build entity-resolution foundation
+6. Build verified Vancouver employee matches
+7. Apply verified employee enrichment
+8. Score record quality and readiness
+9. Detect daily new and changed businesses
+10. Persist daily change history
+11. Load validated V3 data into PostgreSQL
 
-### 1. Corporations Canada
-
-Federal active corporation data provides the primary national legal-entity foundation.
-
-Key fields include:
-
-- Federal Corporation Number
-- Business Number
-- Legal name
-- Status
-- Incorporation/filing information
-- Registered address
-- Province/territory
-- Postal code
-
-Current canonical Federal entities:
-
-**645,005**
+A failure in a stage prevents later stages from being treated as successfully completed.
 
 ---
 
-### 2. City of Vancouver Business Licences
+## Canada-wide Discovery
 
-Current municipal business-licence data adds local businesses and licence-level attributes.
+V3 uses a Canada-wide place/business discovery layer and then applies explicit classification rules.
 
-Current canonical Vancouver entities:
+The discovery layer is not treated as a legal-company registry.
 
-**62,357**
+A source record may represent:
 
-The source also provides useful employee-count and business-category information for many records.
+- a business,
+- a branch/location,
+- a service location,
+- an institution,
+- a public place,
+- another point of interest.
 
----
+For that reason, records are classified before entering the strict business-candidate layer.
 
-### 3. City of Toronto Business Licences and Permits
-
-Toronto municipal licensing data contributes business identity, operating-name, category, address and available phone information.
-
-Current canonical Toronto entities:
-
-**33,437**
-
----
-
-### 4. City of Edmonton Business Licences
-
-Edmonton business-licence data contributes local business identity, licence/category information, address where publicly available, and recent licence activity.
-
-Current canonical Edmonton entities:
-
-**39,714**
-
----
-
-### 5. City of Calgary Business Licences
-
-Calgary business-licence data contributes local business identity, address and licence-category information.
-
-Current canonical Calgary entities:
-
-**22,766**
-
----
-
-### 6. Québec RBQ Active Licences
-
-The Régie du bâtiment du Québec active-licence dataset contributes Québec business identities and strong contact coverage.
-
-Current canonical Québec-local entities:
-
-**46,570**
-
-The processed source also contains strong Federal matches that are linked through provenance rather than inserted as duplicate entities.
-
----
-
-## Coverage Summary
-
-| Registry Jurisdiction | Canonical Entities |
-|---|---:|
-| Federal | 645,005 |
-| Vancouver, BC | 62,357 |
-| Québec, QC | 46,570 |
-| Edmonton, AB | 39,714 |
-| Toronto, ON | 33,437 |
-| Calgary, AB | 22,766 |
-| **Total** | **849,849** |
-
-These figures represent the current canonical database state.
-
-They should not be interpreted as a claim that the system contains every business in Canada or that every record is guaranteed nationally unique across every possible external registry.
-
----
-
-## Source Freshness
-
-| Source | Upstream Source Date | Collected |
-|---|---|---|
-| Corporations Canada | 2026-09-25 | 2026-09-25 |
-| Vancouver Business Licences | 2026-09-24 | 2026-09-25 |
-| Toronto Business Licences | 2026-09-25 | 2026-09-25 |
-| Edmonton Business Licences | 2026-09-23 | 2026-09-25 |
-| Calgary Business Licences | Not reliably supplied upstream | 2026-09-25 |
-| Québec RBQ Active Licences | 2026-09-25 | 2026-09-25 |
-
-Source update timestamps and collection timestamps are stored separately.
-
-If a source does not reliably provide its own update timestamp, the system does not manufacture one.
-
----
-
-## Data Processing
-
-### Collection
-
-Each collector retrieves a specific public/government source and stores the raw data locally together with collection metadata where available.
-
-### Normalization
-
-Source-specific normalizers standardize fields such as:
-
-- legal/operating name
-- business identifiers
-- address
-- city/province
-- postal code
-- phone/email
-- industry/category
-- employee count/bucket
-- status
-- source identifiers
-- collection timestamps
-
-Missing fields remain missing rather than being inferred.
-
-### Entity Resolution
-
-Entity resolution is intentionally conservative.
-
-Strong identifiers are preferred where available:
-
-- Federal Corporation Number
-- Québec NEQ / provincial identifier
-- municipal licence/source identifiers
-
-Cross-source matching may additionally use:
-
-- normalized legal name
-- city
-- postal code
-- address
-- unique-name constraints
-
-Ambiguous name-only candidates are retained for review instead of being automatically merged.
-
----
-
-## PostgreSQL V2 Model
-
-V2 uses a canonical/provenance-oriented schema.
-
-Primary tables include:
+The current strict V3 output contains:
 
 ```text
-data_sources
-business_entities
-business_source_records
-field_provenance
-business_contacts
-business_change_history
-pipeline_runs
+1,183,392 business/location candidates
 ```
 
-`business_entities` stores the canonical business representation.
+Permanently closed records are excluded from the strict candidate output where the upstream status supports that determination.
 
-`business_source_records` preserves the source records that support or map to those canonical entities.
-
-This allows the system to deduplicate source records without discarding traceability.
+An unknown operating-status value is not automatically interpreted as proof that a business is currently open.
 
 ---
 
-## Verified Database Integrity
+## Business Classification
 
-Current integrity validation:
+Classification separates records into:
+
+```text
+BUSINESS
+NON_BUSINESS
+REVIEW
+```
+
+Only the strict `BUSINESS` output proceeds into the current V3 business-location dataset.
+
+Ambiguous categories remain in `REVIEW` instead of being forced into the business dataset.
+
+This approach intentionally prioritizes accuracy over inflating the record count.
+
+---
+
+## Operating Locations vs Business Entities
+
+V3 preserves operating locations separately from business/entity identity.
+
+Current operating-location records:
+
+```text
+1,183,392
+```
+
+Current unique normalized business names:
+
+```text
+928,895
+```
+
+Repeated names are expected because chains and multi-location organizations can operate many locations.
+
+The system therefore does not assume:
+
+```text
+one location = one legal company
+```
+
+and does not use a shared website domain alone as proof that two locations are the same business entity.
+
+---
+
+## Conservative Entity Resolution
+
+The V3 entity-resolution foundation builds conservative location identity keys using combinations such as:
+
+- normalized business name + postal code,
+- normalized business name + phone,
+- normalized business name + appropriate identity domain.
+
+Shared/platform domains are not treated as strong identity keys.
+
+Current resolution foundation:
+
+```text
+Total locations:              1,183,392
+Name + postal:                1,145,288
+Name + phone fallback:           19,875
+Name + domain fallback:           7,049
+Insufficient strong identity:    11,180
+Unique conservative keys:     1,152,703
+```
+
+These conservative keys support entity resolution but are not presented as a final count of unique Canadian legal companies.
+
+---
+
+## Contact Coverage
+
+Current V3 contact availability:
+
+```text
+Phone:    1,110,274
+Email:      600,645
+Website:    992,647
+```
+
+Contact availability is measured independently from employee verification and decision-maker verification.
+
+A phone number, email address, or website supplied by a source is not automatically interpreted as a named decision-maker contact.
+
+---
+
+## Employee Count / Employee Size
+
+Employee information is handled using an evidence-first model.
+
+V3 supports:
+
+```text
+employee_count
+employee_size_bucket
+employee_count_type
+employee_evidence_source
+employee_evidence_url
+employee_verified_at
+employee_evidence_scope
+```
+
+Employee count types are:
+
+```text
+VERIFIED
+ESTIMATED
+UNKNOWN
+```
+
+Evidence scope distinguishes:
+
+```text
+LOCATION
+COMPANY_GLOBAL
+```
+
+This distinction prevents a global corporate headcount from being incorrectly assigned to an individual branch/location.
+
+### Current verified employee coverage
+
+A conservative match between Vancouver government business data and V3 operating locations currently provides:
+
+```text
+3,653 VERIFIED location-level employee records
+```
+
+All other records remain `UNKNOWN` unless suitable evidence exists.
+
+No employee count is fabricated from aggregate industry or geographic statistics.
+
+Public aggregate Statistics Canada employee-size distributions may be useful for benchmarking, but they are not assigned to named businesses as individual facts.
+
+---
+
+## Employee Size Buckets
+
+Where supported by record-level evidence, the target employee-size model supports business-size classification.
+
+The system does not force a bucket when the underlying evidence is insufficient.
+
+This is particularly important where a public statistical source provides aggregate counts rather than named-company headcount.
+
+---
+
+## Quality and Sales Readiness
+
+Each V3 record receives a transparent completeness/quality score based on available identity, address, contact, category, source-confidence, and verified employee evidence.
+
+Current output:
+
+```text
+Sales-ready:   724,614
+Partial:       426,555
+Incomplete:     32,223
+Average score:   81.22
+```
+
+`SALES_READY` is a data-completeness/readiness classification.
+
+It does **not** mean that every field has been independently verified, nor does it mean that every record represents a nationally unique legal company.
+
+The current rule requires:
+
+- quality score >= 80,
+- phone available,
+- email or website available.
+
+---
+
+## Source Confidence
+
+Source/place confidence is retained separately from the V3 quality score.
+
+Current high source-confidence records:
+
+```text
+461,884
+```
+
+Source confidence should not be interpreted as independent verification of every contact field.
+
+---
+
+## Decision-maker / Staff Contact Enrichment
+
+The architecture supports contact-evidence storage for fields such as:
+
+- full name,
+- job title,
+- contact role,
+- email,
+- phone,
+- evidence source,
+- evidence text,
+- verification timestamp,
+- confidence/review status.
+
+Exploratory decision-maker extraction was tested separately.
+
+The current production V3 database does **not** claim verified Canada-wide decision-maker coverage.
+
+Candidates without sufficiently reliable evidence remain outside the production verified-contact layer.
+
+---
+
+## PostgreSQL V3 Model
+
+Primary V3 tables:
+
+```text
+v3_business_locations
+v3_location_sources
+v3_employee_evidence
+v3_contact_evidence
+v3_location_change_history
+v3_pipeline_runs
+```
+
+### `v3_business_locations`
+
+Stores the current business/location snapshot, including:
+
+- identity fields,
+- address,
+- category,
+- contact availability,
+- operating status,
+- source confidence,
+- conservative resolution key,
+- employee fields,
+- quality score,
+- readiness classification,
+- source-confidence band,
+- DNC flag.
+
+### Evidence tables
+
+Employee and contact evidence are separated from the main location record so future enrichment can retain evidence scope, source, verification time and review state.
+
+### Change history
+
+Change history is deliberately preserved independently from current-snapshot refreshes.
+
+Historical location IDs are therefore not deleted merely because a current snapshot changes.
+
+---
+
+## Daily Change Detection
+
+V3 compares the current processed location dataset with the existing PostgreSQL snapshot.
+
+Tracked changes include fields such as:
+
+- business name,
+- address,
+- city,
+- province,
+- postal code,
+- phone,
+- email,
+- website,
+- category,
+- operating status,
+- employee count,
+- employee bucket,
+- employee evidence type.
+
+Records are classified as:
+
+```text
+NEW
+CHANGED
+UNCHANGED
+REMOVED
+```
+
+Actionable changes can be persisted in:
+
+```text
+v3_location_change_history
+```
+
+The initial validated baseline produced:
+
+```text
+NEW:             0
+CHANGED:         0
+UNCHANGED: 1,183,392
+REMOVED:         0
+```
+
+This baseline verifies that the processed location snapshot and the PostgreSQL snapshot were aligned at the time of comparison.
+
+---
+
+## Automated Scheduling
+
+V3 includes:
+
+```text
+run_v3_scheduled.py
+```
+
+The wrapper provides:
+
+- single-run locking,
+- scheduler logging,
+- pipeline exit-code handling,
+- exception handling,
+- lock cleanup.
+
+A Windows Task Scheduler task is configured for daily execution at:
+
+```text
+02:00 local time
+```
+
+The scheduler wrapper and 11-stage pipeline are implemented.
+
+The first unattended scheduled attempt was interrupted during the initial classification stage, so a successful unattended end-to-end scheduled execution is **not yet claimed**.
+
+The current raw Overture acquisition/download step is also outside the 11-stage scheduled transformation pipeline.
+
+These limitations are documented rather than hidden.
+
+---
+
+## Streamlit V3 Dashboard
+
+Start the V3 dashboard with:
+
+```powershell
+streamlit run dashboard/app_v3.py
+```
+
+The dashboard queries PostgreSQL and provides:
+
+- business/location total,
+- phone availability,
+- email availability,
+- website availability,
+- sales-readiness count,
+- verified employee count,
+- high source-confidence count,
+- average quality score,
+- province/territory filtering,
+- category filtering,
+- readiness filtering,
+- source-confidence filtering,
+- contact filtering,
+- employee-evidence filtering,
+- minimum-quality filtering,
+- business search,
+- daily change-history view.
+
+The dashboard does not load the full national dataset into the browser.
+
+---
+
+## V2 Government / Registry Foundation
+
+V2 remains preserved as a separate government/registry-oriented layer.
+
+Current V2 database state:
 
 ```text
 Canonical entities:          849,849
@@ -307,107 +534,63 @@ Duplicate Federal IDs:             0
 Duplicate Provincial IDs:          0
 ```
 
-This validation checks database identity and provenance integrity rather than simply comparing raw source row counts.
+Integrated V2 jurisdictions/sources include:
 
----
+- Corporations Canada
+- Vancouver Business Licences
+- Toronto Business Licences / Permits
+- Edmonton Business Licences
+- Calgary Business Licences
+- Québec RBQ Active Licences
 
-## Contact and Attribute Coverage
+The V3 location count and V2 canonical count must **not** simply be added together because the two layers can overlap and represent different identity granularities.
 
-Available contact information varies by source.
-
-Current examples include:
-
-- Québec-local entities with phone: **46,564**
-- Québec-local entities with email: **44,196**
-- Toronto entities with phone: **12,479**
-- Federal entities with phone after enrichment: **3,471**
-- Federal entities with email after enrichment: **2,990**
-
-Phone numbers, emails, websites, employee counts and other missing fields are not fabricated.
-
----
-
-## Recent Activity Signals
-
-The V2 schema supports:
+For detailed V2 source coverage and freshness information, see:
 
 ```text
-is_new_1d
-is_new_7d
-is_new_30d
+V2_COVERAGE_FRESHNESS_REPORT.md
 ```
-
-Current database totals include:
-
-- **624** records with a 7-day source activity signal
-- **3,852** records with a 30-day source activity signal
-
-These values are source-specific signals.
-
-Depending on the source, the underlying date may represent licence issuance, recent licence activity or another source-defined business event. They are therefore not universally described as newly incorporated companies.
 
 ---
 
-## Streamlit Dashboard
+## Testing
 
-Start the dashboard with:
+Run:
 
 ```powershell
-streamlit run dashboard/app.py
+pytest -q
 ```
 
-The V2 dashboard queries `business_entities` and provides:
+Current validated result:
 
-- total canonical entity count
-- phone/email availability metrics
-- jurisdiction summary
-- source freshness/provenance view
-- business-name search
-- Federal Corporation Number search
-- Business Number search
-- provincial registry identifier search
-- city search
-- jurisdiction filtering
-- status filtering
-- industry/category filtering
-- contact-availability filtering
-- recent 7-day/30-day activity filtering
-- quality/confidence fields
-- CSV export
+```text
+29 passed
+```
 
-The full dataset is queried through PostgreSQL rather than loaded into the browser.
+Tests cover the existing project plus V3 integrity requirements including:
 
----
-
-## Pipeline Execution History
-
-The database records source-load execution metrics in `pipeline_runs`.
-
-The current six recorded source loads all completed successfully with:
-
-**0 failed records**
-
-The execution history tracks:
-
-- records collected
-- records inserted
-- records updated
-- records deduplicated/linked
-- failed records
-- start/end timestamps
-- pipeline status
+- required V3 artifacts,
+- strict candidate count,
+- location-layer preservation,
+- resolution-layer preservation,
+- enrichment-layer preservation,
+- unique location IDs,
+- verified employee count,
+- employee evidence completeness,
+- location-level evidence scope,
+- prevention of fabricated employee values on `UNKNOWN` records.
 
 ---
 
 ## Local Setup
 
-### 1. Create virtual environment
+### 1. Create the environment
 
 ```powershell
 python -m venv .venv
 ```
 
-### 2. Activate on Windows PowerShell
+### 2. Activate on Windows
 
 ```powershell
 .venv\Scripts\Activate.ps1
@@ -419,7 +602,7 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-### 4. Configure environment
+### 4. Configure PostgreSQL
 
 Copy:
 
@@ -433,7 +616,7 @@ to:
 .env
 ```
 
-and provide the local PostgreSQL configuration.
+and provide local PostgreSQL configuration.
 
 Do not commit `.env`.
 
@@ -443,135 +626,103 @@ Do not commit `.env`.
 docker compose up -d postgres
 ```
 
-### 6. Apply database schemas
+### 6. Apply the V3 schema
 
-The repository contains the database schema files used by the project, including the V2 canonical/provenance schema.
-
-Apply the required schema before the first load.
-
-### 7. Start the dashboard
-
-```powershell
-streamlit run dashboard/app.py
-```
-
----
-
-## FastAPI / n8n Orchestration
-
-The project includes the V1 FastAPI/n8n orchestration foundation.
-
-The API can be started locally with:
-
-```powershell
-python -m uvicorn pipeline_api:app --host 0.0.0.0 --port 8000
-```
-
-Endpoints include:
+Apply:
 
 ```text
-GET  /health
-GET  /pipeline/status
-POST /pipeline/run
+database/v3_schema.sql
 ```
 
-The existing n8n workflow can trigger the API and monitor pipeline status until completion or failure.
+before the first V3 database load.
 
-The V2 multi-source collectors/loaders are currently being validated for safe repeatable refresh execution before unattended scheduling is enabled.
-
-This distinction is intentional: scheduling a non-idempotent data loader can create duplicate or inconsistent data.
-
----
-
-## Testing
-
-Run:
+### 7. Run V3 pipeline
 
 ```powershell
-pytest -q
+python run_v3_pipeline.py
 ```
 
-The test suite covers data-quality and database behavior.
+### 8. Start V3 dashboard
 
-Before release/submission, the current V2 branch should be validated using the current test suite together with database integrity checks.
+```powershell
+streamlit run dashboard/app_v3.py
+```
 
 ---
 
-## Data and Repository Hygiene
+## Repository Hygiene
 
-Raw and generated datasets are excluded from Git where appropriate.
+Large raw and generated datasets are excluded from Git.
 
-Typical ignored paths include:
+Runtime logs, scheduler lock files, local environment configuration, and generated V3 Parquet/CSV files are also excluded where appropriate.
 
-```text
-data/raw/
-data/processed/
-data/external/
-```
-
-Environment secrets and runtime logs should also remain excluded.
-
-This keeps the repository lightweight and prevents credentials or large generated datasets from being committed.
+The repository contains code, schemas, tests and documentation rather than the full multi-gigabyte working dataset.
 
 ---
 
-## Design Principles
+## Accuracy Principles
 
-1. Prefer legitimate public and government data sources.
-2. Preserve source provenance.
-3. Separate source records from canonical entities.
-4. Prefer conservative matching over false-positive merges.
-5. Do not invent missing contact or business information.
-6. Track collection and source freshness separately.
-7. Keep collection, normalization, entity resolution, persistence and presentation modular.
-8. Make data-quality limitations visible.
-9. Avoid using raw row counts as business counts when a source contains repeated licence/category records.
-10. Keep the system extensible for additional Canadian sources.
+1. Do not manufacture missing fields.
+2. Do not treat raw source rows as unique businesses without checking source structure.
+3. Do not treat every place/POI as a legal company.
+4. Do not interpret unknown operating status as confirmed open.
+5. Keep locations and legal/entity identity conceptually separate.
+6. Prefer conservative matching over false-positive merging.
+7. Preserve evidence scope for employee and contact information.
+8. Do not assign aggregate employee statistics to individual named businesses.
+9. Keep source confidence separate from record completeness.
+10. Keep incomplete/review records visible instead of artificially forcing them into high-confidence output.
+11. Preserve change history separately from the current snapshot.
+12. Document implementation limitations explicitly.
 
 ---
 
 ## Current Limitations
 
-The current V2 implementation deliberately does **not** claim complete Canadian business coverage.
+The current implementation deliberately does **not** claim complete coverage of every operating business in Canada.
 
 Known limitations include:
 
-- not every Canadian provincial/territorial registry is integrated;
-- contact coverage varies substantially by source;
-- employee-size information is available only where source data supports it;
-- ambiguous cross-source matches are intentionally not auto-merged;
-- cross-municipal/global identity resolution is not exhaustive;
-- recent-business signals have source-specific meanings;
-- broad decision-maker/staff-contact enrichment is not yet implemented;
-- DNC/suppression integration requires further production work;
-- field-level provenance can be expanded beyond the current source-record provenance;
-- V2 unattended scheduled refresh is not yet enabled.
+- the 1,183,392 V3 records are business/location candidates rather than a final national legal-entity count;
+- many upstream records do not provide an explicit operating-status value;
+- verified individual employee coverage is currently limited to evidence-supported records;
+- broad production decision-maker/staff enrichment is not yet available;
+- DNC/suppression schema support exists, but a comprehensive DNC ingestion/verification workflow is not yet implemented;
+- raw Canada-wide source acquisition is not yet part of the daily scheduled transformation runner;
+- the first unattended V3 scheduled execution did not complete end-to-end successfully;
+- evidence/source child-table population can be expanded further;
+- current snapshot loading can be improved toward fully incremental/upsert-based persistence;
+- `first_seen` semantics can be strengthened when the snapshot loader is converted to incremental persistence;
+- additional government/provincial validation sources can improve legal-entity resolution and employee coverage.
 
 ---
 
-## V2 Coverage Report
+## Project Goal
 
-For detailed source counts, freshness dates, entity-resolution results and limitations, see:
+The purpose of this trial implementation is not to manually finish every Canadian business record.
+
+It demonstrates a scalable architecture for:
 
 ```text
-V2_COVERAGE_FRESHNESS_REPORT.md
+discovery
+    ->
+classification
+    ->
+normalization
+    ->
+identity resolution
+    ->
+government/public validation
+    ->
+evidence-based enrichment
+    ->
+quality scoring
+    ->
+change detection
+    ->
+PostgreSQL persistence
+    ->
+dashboard / export / downstream integration
 ```
 
----
-
-## Future Extensions
-
-Potential next phases include:
-
-- additional provincial/territorial sources
-- additional municipal open-data sources
-- incremental/idempotent source refresh
-- automated scheduling
-- snapshot-based change detection
-- expanded field-level provenance
-- website/contact validation
-- broader employee-size enrichment
-- decision-maker enrichment from compliant sources
-- DNC/suppression workflows
-- monitoring and alerting
-- expanded dashboard analytics
+The architecture is designed so additional compliant Canadian sources, employee evidence, decision-maker evidence, validation rules and CRM integrations can be added without replacing the core pipeline.

@@ -23,3 +23,33 @@ data/external/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# -------------------------------------------------
+# V3 generated / raw data
+# -------------------------------------------------
+
+# Overture raw and test datasets
+overture_*_raw.parquet
+overture_*_raw.parquet.state
+*_overture_test.parquet
+*_overture_test.parquet.state
+
+# Generated category audit
+overture_categories.txt
+
+# V3 generated datasets
+data/processed/v3/*.parquet
+data/processed/v3/*.csv
+
+# Downloaded / extracted StatsCan employee-size data
+data/raw/statscan_employee_size_june_2026.zip
+data/raw/statscan_employee_size_june_2026/
+
+# Runtime scheduler files
+logs/v3_scheduler.lock
+logs/v3_scheduler.log
+logs/v3_pipeline_*.log
+
+# Python cache
+__pycache__/
+*.py[cod]
